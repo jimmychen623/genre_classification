@@ -5,6 +5,10 @@ import csv
 from sklearn.model_selection import train_test_split
 from sklearn import svm
 from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import classification_report
+from sklearn.svm import SVC
+from sklearn import preprocessing
 
 dataframe = pd.read_csv('./datasets/records_4000.tsv', sep='\t')
 dataframe['genre'] = dataframe['genre'].str[:-1]
@@ -42,15 +46,19 @@ def create_train_validation_test(df, genre):
 
     train, validation = train_test_split(train, test_size=0.2)
 
+    min_max_scaler = preprocessing.MinMaxScaler()
     # training, validation, and test data
-
     X_train = train.drop(['genre'], axis = 1)
     y_train = train[['genre']]
+    X_train = min_max_scaler.fit_transform(X_train)
 
     X_validation = validation.drop(['genre'], axis = 1)
     y_validation = validation[['genre']]
+    X_validation = min_max_scaler.fit_transform(X_validation)
 
     X_test = test.drop(['genre'], axis = 1)
+    X_test = min_max_scaler.fit_transform(X_test)
+
     y_test = test[['genre']]
 
     return X_train, y_train, X_validation, y_validation, X_test, y_test
@@ -58,7 +66,45 @@ def create_train_validation_test(df, genre):
 
 X_train, y_train, X_validation, y_validation, X_test, y_test = create_train_validation_test(dataframe, 'Jazz')
 
-print(X_train.head(100))
+param_grid = [
+  {'C': [0.003, 0.01, 0.03], 'kernel': ['rbf']}
+  #{'C': [0.01, 0.1, 1, 10, 100, 1000], 'gamma': [0.1, 0.01, 0.001, 0.0001], 'kernel': ['rbf']},
+ ]
+
+scores = ['precision_micro', 'recall_micro']
+for score in scores:
+    print("# Tuning hyper-parameters for %s" % score)
+    print()
+
+    clf = GridSearchCV(SVC(), param_grid, cv=5,
+                       scoring=score)
+    print('gjg')
+    labels = y_train['genre']
+    clf.fit(X_train, labels)
+
+    print("Best parameters set found on development set:")
+    print()
+    print(clf.best_params_)
+    print()
+    print("Grid scores on development set:")
+    print()
+    means = clf.cv_results_['mean_test_score']
+    stds = clf.cv_results_['std_test_score']
+    for mean, std, params in zip(means, stds, clf.cv_results_['params']):
+        print("%0.3f (+/-%0.03f) for %r"
+              % (mean, std * 2, params))
+    print()
+
+    print("Detailed classification report:")
+    print()
+    print("The model is trained on the full development set.")
+    print("The scores are computed on the full evaluation set.")
+    print()
+    y_true, y_pred = y_test, clf.predict(X_test)
+    print(classification_report(y_true, y_pred))
+    print()
+
+
 clf = svm.SVC(kernel='rbf', C=1).fit(X_train, y_train)
 scores = clf.score(X_test, y_test)
 print(scores)
